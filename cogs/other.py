@@ -1,11 +1,8 @@
-from config import config
+import localization as loc
 import discord
-from discord.ext import commands, tasks
-from discord_components import DiscordComponents, Button, ButtonStyle
-import sqlite3
-import os
-from time import time
-import json
+
+from config import config
+from discord.ext import commands
 
 
 class Tickets(commands.Cog):
@@ -18,14 +15,48 @@ class Tickets(commands.Cog):
     @commands.cooldown(1, 2, commands.BucketType.user)
     async def help(self, ctx):
         p=config['bot']['prefix']
-        msg = (
-            f"**{p}ticket_invite** `[N]` `[@users]` ({p}ti) - Приглашает в тикет `N` упомянутых участников."
-            f"\n\n[adm] **{p}ticket_button** `[#channel]` ({p}tb) - Создать кнопку, с текстом из прошлого сообщения в чате, в канале #channel."
-            f"\n\n[adm] **{p}ticket_text** ({p}tt) - Меняет стандартный текст в каждом тикете на текст из прошлого сообщения."
-            f"\n\n[adm] **{p}ticket_cooldown** `[seconds]` ({p}tc) - Меняет куладун на создание новых тикетов."
-            f"\n\n[adm] **{p}ticket_reset** `[everyone/@users]` ({p}tr) - Обнуляет кулдаун создания тектов для конкретных пользователей, или для всех (everyone)."
-        )
-        await ctx.send(embed = discord.Embed(title = "Список команд:", description = msg, color=config['color']['main']))
+
+        common_commands=(
+            f"**{p}ticket_invite** [t] [*@user] ({p}ti)"
+            f"\n```\n{loc.h_ticketInvite}```"
+            
+            f"\n**{p}help** ({p}h)"
+            f"\n```\n{loc.h_help}```"
+            )
+            
+        embed = discord.Embed(
+            description=common_commands,
+            color=config['color']['main'])
+
+        await ctx.send(loc.h_helpTitle, embed=embed)
+
+    @commands.command(aliases=['ha'])
+    @commands.cooldown(1, 2, commands.BucketType.user)
+    @commands.has_permissions(administrator=True)
+    async def help_adm(self, ctx):
+        p=config['bot']['prefix']
+
+        admin_commands=(
+            f"**{p}ticket_button** [#channel] (%tb)"
+            f"\n```\n{loc.h_ticketButton}```"
+            
+            f"\n**{p}ticket_text** (%tt)"
+            f"\n```\n{loc.h_ticketText}```"
+            
+            f"\n**{p}ticket_cooldown** [seconds] (%tc)"
+            f"\n```\n{loc.h_ticketCooldown}```"
+
+            f"\n**{p}ticket_reset** [*@user] (%tr)"
+            f"\n```\n{loc.h_ticketReset}```"
+
+            f"\n**{p}help_adm** (%ha)"
+            f"\n```\n{loc.h_helpAdm}```")
+
+        embed = discord.Embed(
+            description=admin_commands,
+            color=config['color']['main'])
+
+        await ctx.send(loc.h_helpAdminTitle, embed=embed)
 
 
 def setup(bot):

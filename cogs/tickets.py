@@ -1,11 +1,14 @@
-from config import config
+import os
+import json
+import sqlite3
+
+import localization as loc
 import discord
+
+from config import config
+from time import time
 from discord.ext import commands, tasks
 from discord_components import DiscordComponents, Button, ButtonStyle
-import sqlite3
-import os
-from time import time
-import json
 
 
 class Tickets(commands.Cog):
@@ -65,22 +68,29 @@ class Tickets(commands.Cog):
         member = res.author
         text = res.component.label
 
-        if text == '✉️ Создать тикет':
+        if text == f'✉️ {loc.createTicket}':
             note = self.conn.execute(f"SELECT * FROM ticket_limit WHERE user_id = {member_id}").fetchone()
             t = int(time())
+
             if note is None:
                 self.conn.execute("INSERT INTO ticket_limit VALUES(?, ?)", (member_id, t))
                 self.conn.commit()
+
             elif note is not None:
                 if not member.guild_permissions.administrator:
                     passed = int(time())-int(note[1])
                     if passed < self.settings['ticket_limit']:
                         passed = self.settings['ticket_limit'] - passed
-                        if passed > 3600: passed = str(passed//3600)+" ч."
-                        elif passed > 60: passed = str(passed//60)+" мин."
-                        else: passed = str(passed)+" сек."
-                        await member.send(embed = discord.Embed(title="Вы создаете тикеты слишком часто!", description=f"Подождите {passed} или напишите администратору.", color=config['color']['main']))
+                        if passed > 3600: passed = str(passed//3600)+f" {loc.hour}"
+                        elif passed > 60: passed = str(passed//60)+f" {loc.minute}"
+                        else: passed = str(passed)+f" {loc.second}"
+
+                        await member.send(embed=discord.Embed(
+                            title=loc.ticketCooldownTitle,
+                            description=loc.ticketCooldownDescription.replace("($t)", passed),
+                            color=config['color']['main']))
                         return
+
             self.conn.execute(f"UPDATE ticket_limit SET last_opened_at = {t} WHERE user_id = {member_id}")
             self.conn.commit()
             note = self.conn.execute("SELECT * FROM tickets_number ORDER BY ticket_id DESC").fetchone()
@@ -90,75 +100,134 @@ class Tickets(commands.Cog):
 
             overwrites = {
                 guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                guild.default_role: discord.PermissionOverwrite(send_messages=True),
                 guild.me: discord.PermissionOverwrite(read_messages=True),
+                self.bot.user: discord.PermissionOverwrite(send_messages=True),
                 member: discord.PermissionOverwrite(read_messages=True)
             }
-            ch = await category.create_text_channel(f'Тикет №{num}', overwrites=overwrites)
+            ch = await category.create_text_channel(f'{loc.ticket} №{num}', overwrites=overwrites)
+            
             self.conn.execute("INSERT INTO tickets VALUES(?, ?, ?, ?, ?)", (num, member_id, ch.id, "None", 0))
             self.conn.commit()
 
             msg = await ch.send(
-            embed = discord.Embed(title=f"Тикет №{num} открыт.", description=self.settings['tickets_text'], color=config['color']['main']),
-            components = [[
-                Button(style=ButtonStyle.blue, label='🔒 Закрыть тикет'),
-                Button(style=ButtonStyle.blue, label='🔓 Открыть тикет'),
-                Button(style=ButtonStyle.red, label='⚠️ Удалить тикет')
-            ]])
+            embed = discord.Embed(
+                title=loc.newTicketIsNowOpen.replace("($tnum)", str(num)),
+                description=self.settings['tickets_text'],
+                color=config['color']['main']),
+                    components = [[
+                        Button(style=ButtonStyle.blue, label=f'🔒 {loc.closeTicket}'),
+                        Button(style=ButtonStyle.blue, label=f'🔓 {loc.openTicket}', disabled=True),
+                        Button(style=ButtonStyle.red, label=f'⚠️ {loc.deleteTicket}')
+                    ]])
+
             await msg.pin()
             msg = await ch.history(limit=1).flatten()
             await msg[0].delete()
 
-        elif text == '🔒 Закрыть тикет':
-            closed = self.conn.execute(f"SELECT closed FROM tickets WHERE ch_id = {channel.id}").fetchone()
-            if closed[0]: return
+        elif text == f'🔒 {loc.closeTicket}':
+            note = self.conn.execute(f"SELECT * FROM tickets WHERE ch_id = {channel.id}").fetchone()
+            closed = note[4]
+            if closed: return
             overwrites = channel.overwrites_for(guild.default_role)
             overwrites.send_messages = False
             await channel.set_permissions(guild.default_role, overwrite=overwrites)
 
-            embed=discord.Embed(title=f"Тикет закрыт.", description="Он все еще доступен для просмотра, но без возможности отправки сообщений.\nАдминистрация может удалить тикет в закрепленном сообщении.", color=config['color']['red'])
+            embed=discord.Embed(
+                title=loc.ticketIsNowClosedTitle,
+                description=loc.ticketIsNowClosedDescription,
+                color=config['color']['red'])
             embed.set_author(name=member, icon_url=str(member.avatar_url))
             await channel.send(embed=embed)
+
             self.conn.execute(f"UPDATE tickets SET closed = 1 WHERE ch_id = {channel.id}")
             self.conn.commit()
 
-        elif text == '🔓 Открыть тикет':
+            await res.message.edit(
+            embed = discord.Embed(
+                title=loc.newTicketIsNowClosed.replace("($tnum)", str(note[0])),
+                description=self.settings['tickets_text'],
+                color=config['color']['main']),
+                    components = [[
+                        Button(style=ButtonStyle.blue, label=f'🔒 {loc.closeTicket}', disabled=True),
+                        Button(style=ButtonStyle.blue, label=f'🔓 {loc.openTicket}', disabled=False),
+                        Button(style=ButtonStyle.red, label=f'⚠️ {loc.deleteTicket}')
+                    ]])
+
+        elif text == f'🔓 {loc.openTicket}':
             if not member.guild_permissions.administrator: return
-            closed = self.conn.execute(f"SELECT closed FROM tickets WHERE ch_id = {channel.id}").fetchone()
-            if not closed[0]: return
+            note = self.conn.execute(f"SELECT * FROM tickets WHERE ch_id = {channel.id}").fetchone()
+            closed = note[4]
+            if not closed: return
 
             overwrites = channel.overwrites_for(guild.default_role)
             overwrites.send_messages = True
             await channel.set_permissions(guild.default_role, overwrite=overwrites)
 
-            embed=discord.Embed(title=f"Тикет снова открыт.", color=config['color']['lime'])
+            embed=discord.Embed(
+                title=loc.ticketIsNowOpen,
+                color=config['color']['lime'])
             embed.set_author(name=member, icon_url=str(member.avatar_url))
             await channel.send(embed=embed)
             self.conn.execute(f"UPDATE tickets SET closed = 0 WHERE ch_id = {channel.id}")
             self.conn.commit()
 
-        elif text == '⚠️ Удалить тикет':
+            await res.message.edit(
+            embed = discord.Embed(
+                title=loc.newTicketIsNowOpen.replace("($tnum)", str(note[0])),
+                description=self.settings['tickets_text'],
+                color=config['color']['main']),
+                    components = [[
+                        Button(style=ButtonStyle.blue, label=f'🔒 {loc.closeTicket}', disabled=False),
+                        Button(style=ButtonStyle.blue, label=f'🔓 {loc.openTicket}', disabled=True),
+                        Button(style=ButtonStyle.red, label=f'⚠️ {loc.deleteTicket}')
+                    ]])
+
+        elif text == f'⚠️ {loc.deleteTicket}':
             if not member.guild_permissions.administrator: return
             await channel.delete()
             self.conn.execute(f"DELETE FROM tickets WHERE ch_id = {channel.id}")
             self.conn.commit()
 
-        elif text == 'Присоединиться':
+        elif text == loc.joinTheTicket:
             t_num = res.component.custom_id
             note = self.conn.execute(f"SELECT * FROM tickets WHERE ticket_id = {t_num}").fetchone()
+            
             if note is None:
-                await member.send(embed=discord.Embed(title="Упс...", description="Похоже, что этот тикет больше не существует.", color=config['color']['red']))
+                await member.send(embed=discord.Embed(
+                    title=loc.oops,
+                    description=loc.ticketNoLongerExist,
+                    color=config['color']['red']))
                 return
+            
             if str(member.id) in note[3].split():
-                await member.send(embed=discord.Embed(title="Вы уже присоединились.", color=config['color']['red']))
+                await member.send(embed=discord.Embed(
+                    title=loc.alreadyJoined,
+                    color=config['color']['red']))
                 return
+            
             if note[4] == 1:
-                await member.send(embed=discord.Embed(title="Этот тикет закрыт.", description="Чтобы присоединиться - попросите администрацию его открыть.", color=config['color']['red']))
+                await member.send(embed=discord.Embed(
+                    title=loc.ticketIsClosedTitle,
+                    description=loc.ticketIsClosedDescription,
+                    color=config['color']['red']))
                 return
+            
             t_channel = self.bot.get_channel(note[2])
             overwrites = t_channel.overwrites_for(member)
             overwrites.read_messages = True
             await t_channel.set_permissions(member, overwrite=overwrites)
-            await member.send(embed=discord.Embed(title=f"Теперь вам доступен канал тикета №{note[0]}.", color=config['color']['gray']))
+            await member.send(embed=discord.Embed(
+                title=loc.ticketIsNowAvailable.replace("($tnum)", {note[0]}),
+                color=config['color']['gray']))
+
+            embed=discord.Embed(
+                description=loc.userHasJoined,
+                color=config['color']['lime'])
+            embed.set_author(
+                name=member,
+                icon_url=str(member.avatar_url))
+            await t_channel.send(embed=embed)
 
             if note[3] == "None": users = str(member.id)
             else: users = note[3]+" "+str(member.id)
@@ -166,13 +235,13 @@ class Tickets(commands.Cog):
             self.conn.execute(f"INSERT INTO tickets VALUES(?, ?, ?, ?, ?)", (note[0], note[1], note[2], users, note[4]))
             self.conn.commit()
         
-        elif text == 'Отказаться':
+        elif text == loc.refuse:
             t_num = int(str(res.component.custom_id)[:-1])
             note = self.conn.execute(f"SELECT * FROM tickets WHERE ticket_id = {t_num}").fetchone()
             if note is None: pass
             else:
                 t_channel = self.bot.get_channel(note[2])
-                embed=discord.Embed(description=f"Пользователь отказался присоединяться к тикету.", color=config['color']['gray'])
+                embed=discord.Embed(description=loc.userRefusedToJoin, color=config['color']['gray'])
                 embed.set_author(name=member, icon_url=str(member.avatar_url))
                 await t_channel.send(embed=embed)
             await res.message.delete()
@@ -187,10 +256,14 @@ class Tickets(commands.Cog):
         message = await ctx.channel.history(limit=2).flatten()
         message = message[1].content
         self.settings['tickets_text'] = message
+
         file = os.path.join(self.main_folder, "settings.json")
         with open(file, 'w', encoding='utf8') as write_file:
             json.dump(self.settings, write_file)
-        await ctx.send(embed = discord.Embed(title="Текст успешно изменен.", color=config['color']['lime']))
+            
+        await ctx.send(embed = discord.Embed(
+            title=loc.textHasBeenChanged,
+            color=config['color']['lime']))
 
     @commands.command(aliases=['tb'])
     @commands.cooldown(1, 2, commands.BucketType.user)
@@ -209,7 +282,7 @@ class Tickets(commands.Cog):
         await channel.send(
             embed = discord.Embed(description=message, color=color),
             components = [[
-                Button(style=ButtonStyle.blue, label='✉️ Создать тикет')
+                Button(style=ButtonStyle.blue, label=f'✉️ {loc.createTicket}')
             ]])
 
     @commands.command(aliases=['ti'])
@@ -219,18 +292,25 @@ class Tickets(commands.Cog):
         num = num[1]
         note = self.conn.execute(f"SELECT * FROM tickets WHERE ticket_id = {num}").fetchone()
         if note is None or (note[1] != ctx.author.id and not ctx.author.guild_permissions.administrator):
-            await ctx.send(embed=discord.Embed(title="Что-то не так....", description="Вы ввели неправильный номер тикета или этот тикет открыт не вами.\nПример исползования команды: `%ti 34 @user1 @user2`", color=config['color']['red']))
+            await ctx.send(embed=discord.Embed(
+                title=loc.somethingsWrong,
+                description=loc.incorrectTicketNumber,
+                color=config['color']['red']))
             return
 
         for member in ctx.message.mentions:
             try:
-                embed=discord.Embed(title=f"Вы были приглашены в тикет №{note[0]}", description="Если вы хотите к нему присоединиться - нажмите на соответсвующую кнопку под этим сообщением:", color=config['color']['main'])
+                embed=discord.Embed(
+                    title=loc.uInvitedToTicketTitle.replace("($tnum)", note[0]),
+                    description=loc.uInvitedToTicketDescription,
+                    color=config['color']['main'])
                 embed.set_author(name=ctx.author, icon_url=str(ctx.author.avatar_url))
+
                 await member.send(embed=embed,
-                components = [[
-                    Button(style=ButtonStyle.blue, label='Присоединиться', custom_id=note[0]),
-                    Button(style=ButtonStyle.red, label='Отказаться', custom_id=int(str(note[0])+"0"))
-                ]])
+                    components = [[
+                        Button(style=ButtonStyle.blue, label=loc.joinTheTicket, custom_id=note[0]),
+                        Button(style=ButtonStyle.red, label=loc.refuse, custom_id=int(str(note[0])+"0"))
+                    ]])
             except: pass
         
     @commands.command(aliases=['tc'])
@@ -240,10 +320,14 @@ class Tickets(commands.Cog):
         arg = ctx.message.content.split()
         arg = int(arg[1])
         self.settings['ticket_limit'] = arg
+
         file = os.path.join(self.main_folder, "settings.json")
         with open(file, 'w', encoding='utf8') as write_file:
             json.dump(self.settings, write_file)
-        await ctx.send(embed = discord.Embed(title="Кулдаун успешно изменен.", color=config['color']['lime']))
+
+        await ctx.send(embed = discord.Embed(
+            title=loc.cooldownChanged,
+            color=config['color']['lime']))
 
     @commands.command(aliases=['tr'])
     @commands.cooldown(1, 6, commands.BucketType.user)
@@ -258,7 +342,9 @@ class Tickets(commands.Cog):
             for member in ctx.message.mentions:
                 self.conn.execute(f"DELETE FROM ticket_limit WHERE user_id = {member.id}")
             self.conn.commit()
-        await ctx.send(embed=discord.Embed(title="Куладун успешно сброшен", color=config['color']['lime']))
+        await ctx.send(embed=discord.Embed(
+            title=loc.cooldownReset,
+            color=config['color']['lime']))
 
 
 def setup(bot):
