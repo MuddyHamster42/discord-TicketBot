@@ -99,10 +99,8 @@ class Tickets(commands.Cog):
             self.conn.commit()
 
             overwrites = {
-                guild.default_role: discord.PermissionOverwrite(read_messages=False),
-                guild.default_role: discord.PermissionOverwrite(send_messages=True),
-                guild.me: discord.PermissionOverwrite(read_messages=True),
-                self.bot.user: discord.PermissionOverwrite(send_messages=True),
+                guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=True),
+                self.bot.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
                 member: discord.PermissionOverwrite(read_messages=True)
             }
             ch = await category.create_text_channel(f'{loc.ticket} №{num}', overwrites=overwrites)
