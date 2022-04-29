@@ -214,7 +214,7 @@ class Tickets(commands.Cog):
                     log_ch = self.bot.get_channel(note[0])
 
                     embed = discord.Embed(
-                        title=loc.TicketIsNowDeleted.replace("($tnum)", str(tnum[0])),
+                        title=loc.ticketIsNowDeleted.replace("($tnum)", str(tnum[0])),
                         color=config['color']['red'])
                     embed.set_author(name=member, icon_url=member.avatar_url)
 
