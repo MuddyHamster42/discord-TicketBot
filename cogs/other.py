@@ -49,6 +49,9 @@ class Tickets(commands.Cog):
             f"\n**{p}ticket_reset** [*@user] (%tr)"
             f"\n```\n{loc.h_ticketReset}```"
 
+            f"\n**{p}set_logs_channel** [#channel/None] (%slc)"
+            f"\n```\n{loc.h_setLogsChannel}```"
+
             f"\n**{p}help_adm** (%ha)"
             f"\n```\n{loc.h_helpAdm}```")
 

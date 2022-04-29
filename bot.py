@@ -21,7 +21,7 @@ async def on_ready():
 
     await bot.change_presence(
         status=discord.Status.online,
-        activity=discord.Game(loc.gameActivity.replace("$p", p)))
+        activity=discord.Game(loc.gameActivity.replace("($p)", p)))
     print(f"[i] {name} {loc.onReady}\n")
 
 @bot.event
@@ -29,12 +29,12 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandOnCooldown):
         s=round(error.retry_after, 1)
         await ctx.reply(
-            content=loc.commandOnCooldown.replace("$s", s))
+            content=loc.commandOnCooldown.replace("($s)", str(s)))
     
     elif ctx.author.guild_permissions.administrator:
         p=config['bot']['prefix']
         await ctx.send(embed = discord.Embed(
-            description=loc.commandNotFound.replace("$p", p),
+            description=loc.commandNotFound.replace("($p)", p),
             color=config['color']['red']))
     
     elif isinstance(error, commands.MissingPermissions): pass

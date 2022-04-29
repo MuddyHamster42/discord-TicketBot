@@ -43,7 +43,11 @@ class Tickets(commands.Cog):
                     user_id INT PRIMARY KEY,
                     last_opened_at INT);
             """)
-            note = self.conn.execute("SELECT * FROM tickets_number ORDER BY ticket_id DESC").fetchone()
+            self.cur.execute("""
+                CREATE TABLE IF NOT EXISTS logs(
+                    channel_id INT PRIMARY KEY);
+            """)
+            note = self.conn.execute("SELECT * FROM tickets_number").fetchone()
             if note is None:
                 self.conn.execute("INSERT INTO tickets_number VALUES(?)", (0,))
                 self.conn.commit()
@@ -135,7 +139,7 @@ class Tickets(commands.Cog):
                 title=loc.ticketIsNowClosedTitle,
                 description=loc.ticketIsNowClosedDescription,
                 color=config['color']['red'])
-            embed.set_author(name=member, icon_url=str(member.avatar_url))
+            embed.set_author(name=member, icon_url=member.avatar_url)
             await channel.send(embed=embed)
 
             self.conn.execute(f"UPDATE tickets SET closed = 1 WHERE ch_id = {channel.id}")
@@ -152,6 +156,22 @@ class Tickets(commands.Cog):
                         Button(style=ButtonStyle.red, label=f'⚠️ {loc.deleteTicket}')
                     ]])
 
+            note = self.conn.execute("SELECT * FROM logs").fetchone()
+            tnum = self.conn.execute("SELECT * FROM tickets_number").fetchone()
+            if note is not None:
+                try:
+                    log_ch = self.bot.get_channel(note[0])
+
+                    embed = discord.Embed(
+                        title=loc.newTicketIsNowClosed.replace("($tnum)", str(tnum[0])),
+                        color=config['color']['main'])
+                    embed.set_author(name=member, icon_url=member.avatar_url)
+
+                    await log_ch.send(embed=embed)
+                    
+                except Exception as e:
+                    print("[x] Logs error (ticket close):", e)
+
         elif text == f'🔓 {loc.openTicket}':
             if not member.guild_permissions.administrator: return
             note = self.conn.execute(f"SELECT * FROM tickets WHERE ch_id = {channel.id}").fetchone()
@@ -165,7 +185,7 @@ class Tickets(commands.Cog):
             embed=discord.Embed(
                 title=loc.ticketIsNowOpen,
                 color=config['color']['lime'])
-            embed.set_author(name=member, icon_url=str(member.avatar_url))
+            embed.set_author(name=member, icon_url=member.avatar_url)
             await channel.send(embed=embed)
             self.conn.execute(f"UPDATE tickets SET closed = 0 WHERE ch_id = {channel.id}")
             self.conn.commit()
@@ -186,6 +206,22 @@ class Tickets(commands.Cog):
             await channel.delete()
             self.conn.execute(f"DELETE FROM tickets WHERE ch_id = {channel.id}")
             self.conn.commit()
+
+            note = self.conn.execute("SELECT * FROM logs").fetchone()
+            tnum = self.conn.execute("SELECT * FROM tickets_number").fetchone()
+            if note is not None:
+                try:
+                    log_ch = self.bot.get_channel(note[0])
+
+                    embed = discord.Embed(
+                        title=loc.TicketIsNowDeleted.replace("($tnum)", str(tnum[0])),
+                        color=config['color']['red'])
+                    embed.set_author(name=member, icon_url=member.avatar_url)
+
+                    await log_ch.send(embed=embed)
+                    
+                except Exception as e:
+                    print("[x] Logs error (ticket delete):", e)
 
         elif text == loc.joinTheTicket:
             t_num = res.component.custom_id
@@ -224,7 +260,7 @@ class Tickets(commands.Cog):
                 color=config['color']['lime'])
             embed.set_author(
                 name=member,
-                icon_url=str(member.avatar_url))
+                icon_url=member.avatar_url)
             await t_channel.send(embed=embed)
 
             if note[3] == "None": users = str(member.id)
@@ -240,10 +276,9 @@ class Tickets(commands.Cog):
             else:
                 t_channel = self.bot.get_channel(note[2])
                 embed=discord.Embed(description=loc.userRefusedToJoin, color=config['color']['gray'])
-                embed.set_author(name=member, icon_url=str(member.avatar_url))
+                embed.set_author(name=member, icon_url=member.avatar_url)
                 await t_channel.send(embed=embed)
             await res.message.delete()
-
 
     # ======================================= #
 
@@ -343,6 +378,44 @@ class Tickets(commands.Cog):
         await ctx.send(embed=discord.Embed(
             title=loc.cooldownReset,
             color=config['color']['lime']))
+
+    @commands.command(aliases=['slc'])
+    @commands.cooldown(1, 6, commands.BucketType.user)
+    @commands.has_permissions(administrator=True)
+    async def set_logs_channel(self, ctx):
+        channel = ctx.message.content.split()[1]
+        channel = channel.replace("<", "")
+        channel = channel.replace("#", "")
+        channel = channel.replace(">", "")
+
+        if channel == "None":
+            self.conn.execute("DELETE FROM logs")
+            self.conn.commit()
+            await ctx.send(embed = discord.Embed(
+                title=loc.setLogsNone,
+                color=config['color']['lime']))
+            return
+
+        try: ch_obj = self.bot.get_channel(int(channel))
+        except: ch_obj = None
+        if ch_obj is None:
+            await ctx.send(embed = discord.Embed(
+                title=loc.setLogsWrongChannel,
+                color=config['color']['red']))
+            return
+
+        note = self.conn.execute("SELECT * FROM logs").fetchone()
+        if note is None:
+            self.conn.execute("INSERT INTO logs VALUES(?)", (ch_obj.id,))
+        else:
+            self.conn.execute(f"UPDATE logs SET channel_id = {ch_obj.id}")
+        self.conn.commit()
+        note = self.conn.execute("SELECT * FROM logs").fetchone()
+
+        await ctx.send(embed = discord.Embed(
+            title=loc.setLogsSuccess,
+            color=config['color']['lime']))
+
 
 
 def setup(bot):
