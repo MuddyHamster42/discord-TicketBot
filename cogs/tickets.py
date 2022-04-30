@@ -1,17 +1,18 @@
 import os
 import json
 import sqlite3
-
-import localization as loc
-import discord
-
-from config import config
 from time import time
+
+import discord
 from discord.ext import commands, tasks
 from discord_components import DiscordComponents, Button, ButtonStyle
 
+from config import config
+import localization as loc
+
 
 class Tickets(commands.Cog):
+
     def __init__(self, bot):
         self.bot = bot
         self.cogs_folder = os.path.dirname(__file__)
@@ -415,7 +416,6 @@ class Tickets(commands.Cog):
         await ctx.send(embed = discord.Embed(
             title=loc.setLogsSuccess,
             color=config['color']['lime']))
-
 
 
 def setup(bot):

@@ -1,9 +1,7 @@
 config = {
     'bot': {
-        'name': 'TicketBot',
-        'id': 000000000000000000,
-        'prefix': '%',
-        'token': 'xxxxxxxxxxxxxxxxxxxxxxxx.xxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxx'
+        'name': 'Ticket-Bot',
+        'prefix': '%'
     },
 
     'color': {

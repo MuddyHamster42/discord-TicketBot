@@ -1,11 +1,12 @@
-import localization as loc
 import discord
+from discord.ext import commands
 
 from config import config
-from discord.ext import commands
+import localization as loc
 
 
 class Tickets(commands.Cog):
+    
     def __init__(self, bot):
         self.bot = bot
 
