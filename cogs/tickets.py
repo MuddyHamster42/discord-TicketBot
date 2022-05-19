@@ -92,7 +92,7 @@ class Tickets(commands.Cog):
 
                         await member.send(embed=discord.Embed(
                             title=loc.ticketCooldownTitle,
-                            description=loc.ticketCooldownDescription.replace("($t)", passed),
+                            description=loc.ticketCooldownDescription.replace("($time)", passed),
                             color=config['color']['main']))
                         return
 
